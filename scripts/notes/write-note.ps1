@@ -83,30 +83,46 @@ if ($LASTEXITCODE -ne 0) {
 
 Log "Note written to refs/notes/$namespace on $($Commit.Substring(0,[Math]::Min(8,$Commit.Length)))" Green
 
-# ── Push with retry on conflict ───────────────────────────────────────────────
+# ── Push with retry using fetch-first-append pattern (Picard architecture) ───
+# Key insight: fetch-first overwrites local with remote state. We then re-append
+# our note on top. This is always a fast-forward — no merge needed.
+# On the rare push failure (someone else beat us in the same window), we retry.
 if (-not $NoPush) {
-    $maxRetries = 3
+    $maxRetries = 5
+    $nsRef = "refs/notes/$namespace"
+
     for ($i = 0; $i -lt $maxRetries; $i++) {
         Log "Pushing notes (attempt $($i+1))..."
-        $pushOut = git -C $repo push $Remote "refs/notes/*:refs/notes/*" 2>&1
+        $pushOut = git -C $repo push $Remote "${nsRef}:${nsRef}" 2>&1
         if ($LASTEXITCODE -eq 0) {
             Log "Notes pushed successfully." Green
             break
         }
-        if ($pushOut -match "non-fast-forward") {
-            Log "Push conflict — fetching and merging, then retrying..." DarkYellow
-            git -C $repo fetch $Remote "refs/notes/*:refs/notes/*" 2>&1 | Out-Null
-            # Try notes merge for our namespace
-            $remoteRef = "refs/notes/remotes/$Remote/$namespace"
-            $remoteExists = git -C $repo for-each-ref $remoteRef --format="%(refname)" 2>&1
-            if ($remoteExists) {
-                git -C $repo notes merge $remoteRef 2>&1 | Out-Null
+
+        if ($pushOut -match "non-fast-forward" -or $pushOut -match "fetch first" -or $pushOut -match "rejected") {
+            Log "Push conflict — fetch-first retry..." DarkYellow
+
+            # Force-fetch: overwrite local ref with current remote state
+            git -C $repo fetch $Remote "${nsRef}:${nsRef}" 2>&1 | Out-Null
+
+            # Check if our note is already on remote (prior attempt may have succeeded)
+            $existingNote = git -C $repo notes --ref=$namespace show $Commit 2>&1
+            if ($LASTEXITCODE -eq 0 -and ($existingNote -join "`n") -match [regex]::Escape($noteJson.Substring(0, [Math]::Min(50, $noteJson.Length)))) {
+                Log "Note already present on remote — push succeeded earlier." Green
+                break
             }
-            Start-Sleep -Seconds 2
+
+            # Re-append our note on top of the now-current remote state
+            git -C $repo notes --ref=$namespace append -m $noteJson $Commit 2>&1 | Out-Null
+
+            $jitter = Get-Random -Minimum 0 -Maximum 1000
+            $sleep  = [Math]::Pow(2, $i) + $jitter / 1000
+            Start-Sleep -Seconds $sleep
+
         } else {
             Log "Push error: $pushOut" Red
             if ($i -eq $maxRetries - 1) {
-                Write-Warning "Failed to push notes after $maxRetries retries. Notes are written locally — push manually: git push origin 'refs/notes/*:refs/notes/*'"
+                Write-Warning "Failed after $maxRetries retries. Push manually: git push origin '${nsRef}:${nsRef}'"
             }
         }
     }

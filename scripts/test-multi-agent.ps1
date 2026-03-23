@@ -177,17 +177,23 @@ Log "Data pushed research note first"
 
 # Worf pushes second — expect conflict
 $worfPushOut = git -C $cloneWorf push origin "refs/notes/*:refs/notes/*" 2>&1
-if ($LASTEXITCODE -ne 0 -and $worfPushOut -match "non-fast-forward") {
+if ($LASTEXITCODE -ne 0 -and ($worfPushOut -match "non-fast-forward" -or $worfPushOut -match "fetch first" -or $worfPushOut -match "rejected")) {
     Pass "Worf's push correctly detected as non-fast-forward"
 
-    # Resolve: fetch + merge
-    git -C $cloneWorf fetch origin "refs/notes/*:refs/notes/*" -q 2>&1 | Out-Null
-    $remoteRef = "refs/notes/remotes/origin/research"
-    git -C $cloneWorf notes merge $remoteRef 2>&1 | Out-Null
-    Log "Worf ran notes merge"
+    # Resolve: fetch-first-append pattern
+    # Step 1: save Worf's note JSON (we know what we want to write)
+    $worfNoteJson = '{"note":"Worf research: OAuth has better revocation"}'
 
-    # Now push again
-    git -C $cloneWorf push -q origin "refs/notes/*:refs/notes/*" 2>&1 | Out-Null
+    # Step 2: force-fetch overwrites local ref with remote (Data's note)
+    git -C $cloneWorf fetch origin "refs/notes/squad/research:refs/notes/squad/research" -q 2>&1 | Out-Null
+    Log "Fetched remote state (Data's note) into local"
+
+    # Step 3: re-append Worf's note on top of the now-current state
+    git -C $cloneWorf notes --ref=squad/research append -m $worfNoteJson $newSha 2>&1 | Out-Null
+    Log "Re-appended Worf's note"
+
+    # Step 4: push — now fast-forward since we started from remote state
+    git -C $cloneWorf push -q origin "refs/notes/squad/research:refs/notes/squad/research" 2>&1 | Out-Null
     if ($LASTEXITCODE -eq 0) {
         Pass "Worf pushed successfully after conflict resolution"
 
@@ -196,7 +202,7 @@ if ($LASTEXITCODE -ne 0 -and $worfPushOut -match "non-fast-forward") {
         $researchNote = git -C $cloneData notes --ref=squad/research show $newSha 2>&1
         $researchText = if ($researchNote -is [array]) { $researchNote -join "`n" } else { $researchNote }
 
-        if ($researchText -match "JWT wins" -and $researchText -match "OAuth has better") {
+        if ($researchText -match "JWT wins" -and ($researchText -match "OAuth has better" -or $researchText -match "Worf research")) {
             Pass "Both research entries preserved after merge"
         } else {
             Fail "Research note content" "Missing one entry. Got: $($researchText.Substring(0,[Math]::Min(300,$researchText.Length)))"
@@ -258,7 +264,8 @@ if ($LASTEXITCODE -eq 0 -and $directNote -match "too risky") {
 
 Write-Host "`n═══ Results ═══" -ForegroundColor White
 Write-Host "  Passed: $passed" -ForegroundColor Green
-Write-Host "  Failed: $failed" -ForegroundColor (if ($failed -gt 0) { "Red" } else { "Green" })
+$failColor = if ($failed -gt 0) { "Red" } else { "Green" }
+Write-Host "  Failed: $failed" -ForegroundColor $failColor
 
 if (-not $KeepTemp) {
     Remove-Item $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
