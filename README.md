@@ -21,7 +21,7 @@ Agents write ephemeral notes while working. Ralph promotes valuable ones to the 
 ## Quick start
 
 ```bash
-git clone https://github.com/tamirdresher_microsoft/squad-git-notes-reference
+git clone https://github.com/tamirdresher/squad-git-notes-reference
 cd squad-git-notes-reference
 pwsh ./scripts/squad-init.ps1
 ```
@@ -191,6 +191,7 @@ git ls-tree -r origin/squad/state -- research/
 
 ## Related
 
-- **Demo repo**: [squad-git-notes-demo](https://github.com/tamirdresher_microsoft/squad-git-notes-demo) — four runnable scenarios illustrating why notes beats branches for state
+- **Demo repo**: [squad-git-notes-demo](https://github.com/tamirdresher/squad-git-notes-demo) — four runnable scenarios illustrating why notes beats branches for state
 - **Git worktrees post**: [Working with Git Worktrees](https://tamirdresher.github.io) — used here by `promote.ps1` and `archive.ps1` to update the state branch without disrupting your working tree
 - **Blog series**: [Scaling AI — Part 7b](https://tamirdresher.github.io)
+

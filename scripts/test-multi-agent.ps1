@@ -211,9 +211,16 @@ if ($LASTEXITCODE -ne 0 -and ($worfPushOut -match "non-fast-forward" -or $worfPu
         Fail "Worf second push" "Still failed after merge: exit $LASTEXITCODE"
     }
 } elseif ($LASTEXITCODE -eq 0) {
-    # Sometimes the remote fast-forwards if notes happen to be compatible
-    Log "Push succeeded without conflict (acceptable if notes auto-merged)" DarkGray
-    Pass "Worf push succeeded (no conflict needed)"
+    # Push succeeded without conflict (notes were auto-merged or no race).
+    # Still verify both entries are present — don't pass blindly.
+    git -C $cloneData fetch origin "refs/notes/*:refs/notes/*" -q 2>&1 | Out-Null
+    $researchNote = git -C $cloneData notes --ref=squad/research show $newSha 2>&1
+    $researchText = if ($researchNote -is [array]) { $researchNote -join "`n" } else { $researchNote }
+    if ($researchText -match "JWT wins" -and ($researchText -match "OAuth has better" -or $researchText -match "Worf research")) {
+        Pass "Both research entries preserved (push succeeded on first try)"
+    } else {
+        Fail "Research note content after direct push" "Missing one entry. Got: $($researchText.Substring(0,[Math]::Min(300,$researchText.Length)))"
+    }
 } else {
     Fail "Worf conflict detection" "Unexpected error: $worfPushOut"
 }

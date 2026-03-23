@@ -10,7 +10,7 @@ This guide shows you exactly how to run every test, understand what it verifies,
 - PowerShell 7+ (`pwsh`)
 - A clone of this repo with `squad-init.ps1` already run:
   ```bash
-  git clone https://github.com/tamirdresher_microsoft/squad-git-notes-reference
+  git clone https://github.com/tamirdresher/squad-git-notes-reference
   cd squad-git-notes-reference
   pwsh ./scripts/squad-init.ps1
   ```
@@ -193,7 +193,7 @@ git notes --ref=squad/research show HEAD  # shows both notes
 1. `git log main --notes=squad/data` does NOT show the note from D — D is not reachable from main
 2. `git notes --ref=squad/data show <sha-of-D>` DOES show the note — it's still accessible by SHA
 
-**Why this matters**: This is scenario 1 from the [demo repo](https://github.com/tamirdresher_microsoft/squad-git-notes-demo). A rejected PR's decisions are invisible from main but not lost — Ralph can still archive them to `state/research/` by traversing the closed branch.
+**Why this matters**: This is scenario 1 from the [demo repo](https://github.com/tamirdresher/squad-git-notes-demo). A rejected PR's decisions are invisible from main but not lost — Ralph can still archive them to `state/research/` by traversing the closed branch.
 
 **Reproducing manually**:
 ```bash
@@ -341,3 +341,4 @@ jobs:
 ```
 
 No GitHub token or external service needed — the test uses a fully local bare repo.
+

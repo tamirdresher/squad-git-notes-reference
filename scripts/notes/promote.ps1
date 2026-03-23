@@ -26,6 +26,23 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Safely split a string containing one or more concatenated JSON objects.
+# The naive regex (?<=})\s*(?={) breaks when a string value contains "} {".
+function Split-JsonObjects ([string]$text) {
+    $results = [System.Collections.Generic.List[string]]::new()
+    $depth = 0; $start = -1; $inString = $false; $esc = $false
+    for ($i = 0; $i -lt $text.Length; $i++) {
+        $c = $text[$i]
+        if ($esc)                          { $esc = $false; continue }
+        if ($c -eq '\' -and $inString)     { $esc = $true;  continue }
+        if ($c -eq '"')                    { $inString = !$inString; continue }
+        if ($inString)                     { continue }
+        if ($c -eq '{')                    { if ($depth -eq 0) { $start = $i }; $depth++ }
+        elseif ($c -eq '}')               { $depth--; if ($depth -eq 0 -and $start -ge 0) { $results.Add($text.Substring($start, $i - $start + 1)); $start = -1 } }
+    }
+    return $results
+}
+
 function Log ([string]$msg, [string]$color = "White") {
     if (-not $Quiet) { Write-Host "[notes/promote]$(if($DryRun){' [DRY-RUN]'}) $msg" -ForegroundColor $color }
 }
@@ -63,8 +80,7 @@ foreach ($sha in $commits) {
         try {
             $noteLines = if ($note -is [array]) { $note -join "`n" } else { $note }
             # Handle appended notes (may be multiple JSON objects or newline-separated)
-            $entries = $noteLines -split '(?<=\})\s*(?=\{)' |
-                       Where-Object { $_.Trim() } |
+            $entries = (Split-JsonObjects $noteLines) |
                        ForEach-Object {
                            try { $_ | ConvertFrom-Json -ErrorAction Stop } catch { $null }
                        } |
@@ -142,6 +158,9 @@ if (-not $DryRun) {
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
 
     try {
+        # Worktree guard: prune any dangling worktrees left by a prior killed run
+        git -C $repo worktree prune 2>&1 | Out-Null
+
         # Checkout state branch into tmpDir
         git -C $repo worktree add -q $tmpDir "squad/state" 2>&1 | Out-Null
 

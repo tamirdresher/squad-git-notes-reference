@@ -76,11 +76,11 @@ function Get-PRWatermark {
         if ($w.lastChecked) { return $w.lastChecked }
     }
     # First run — look back 7 days to catch any PRs closed during a long outage
-    return (Get-Date).AddDays(-7).ToString("yyyy-MM-ddTHH:mm:ssZ")
+    return (Get-Date).AddDays(-7).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 }
 
 function Set-PRWatermark {
-    @{ lastChecked = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ") } |
+    @{ lastChecked = [System.DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ") } |
         ConvertTo-Json | Set-Content $WatermarkFile -Encoding UTF8
 }
 
@@ -112,7 +112,7 @@ function Test-IsActionable ([object]$issue) {
 }
 
 function Claim-Issue ([int]$Number) {
-    $ts = Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ"
+    $ts = [System.DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     Log "Claiming issue #$Number..." OK
     gh issue edit $Number --repo $Repo --add-assignee "@me" 2>&1 | Out-Null
     gh issue comment $Number --repo $Repo --body "🔄 Claimed by **ralph-watch** at $ts" 2>&1 | Out-Null

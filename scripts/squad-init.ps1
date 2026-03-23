@@ -5,7 +5,7 @@
 # Run once after cloning to configure notes refspecs and create the state branch.
 #
 # Usage:
-#   git clone https://github.com/tamirdresher_microsoft/squad-git-notes-reference
+#   git clone https://github.com/tamirdresher/squad-git-notes-reference
 #   cd squad-git-notes-reference
 #   pwsh ./scripts/squad-init.ps1
 # ─────────────────────────────────────────────────────────────────────────────
@@ -142,3 +142,4 @@ if ($stateRef -match "squad/state") {
 Write-Host "`n✅  Squad init complete! You can now run:" -ForegroundColor Green
 Write-Host "    pwsh ./scripts/ralph-watch.ps1 -Once  " -ForegroundColor DarkGray
 Write-Host "    pwsh ./scripts/test-multi-agent.ps1   " -ForegroundColor DarkGray
+

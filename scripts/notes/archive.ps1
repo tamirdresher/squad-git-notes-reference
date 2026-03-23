@@ -32,6 +32,22 @@ function Log ([string]$msg, [string]$color = "White") {
     if (-not $Quiet) { Write-Host "[notes/archive]$(if($DryRun){' [DRY-RUN]'}) $msg" -ForegroundColor $color }
 }
 
+# Safely split a string containing one or more concatenated JSON objects.
+function Split-JsonObjects ([string]$text) {
+    $results = [System.Collections.Generic.List[string]]::new()
+    $depth = 0; $start = -1; $inString = $false; $esc = $false
+    for ($i = 0; $i -lt $text.Length; $i++) {
+        $c = $text[$i]
+        if ($esc)                          { $esc = $false; continue }
+        if ($c -eq '\' -and $inString)     { $esc = $true;  continue }
+        if ($c -eq '"')                    { $inString = !$inString; continue }
+        if ($inString)                     { continue }
+        if ($c -eq '{')                    { if ($depth -eq 0) { $start = $i }; $depth++ }
+        elseif ($c -eq '}')               { $depth--; if ($depth -eq 0 -and $start -ge 0) { $results.Add($text.Substring($start, $i - $start + 1)); $start = -1 } }
+    }
+    return $results
+}
+
 $repo = Resolve-Path $RepoPath
 
 # ── Fetch notes and branches ──────────────────────────────────────────────────
@@ -66,8 +82,7 @@ foreach ($sha in $exclusiveCommits) {
 
         try {
             $noteText = if ($note -is [array]) { $note -join "`n" } else { $note }
-            $entries  = $noteText -split '(?<=\})\s*(?=\{)' |
-                        Where-Object { $_.Trim() } |
+            $entries  = (Split-JsonObjects $noteText) |
                         ForEach-Object { try { $_ | ConvertFrom-Json -ErrorAction Stop } catch { $null } } |
                         Where-Object { $_ -ne $null }
 
@@ -77,7 +92,7 @@ foreach ($sha in $exclusiveCommits) {
                         Sha       = $sha
                         Namespace = $ns
                         Entry     = $entry
-                        Raw       = ($_ | ConvertTo-Json -Depth 10)
+                        Raw       = ($entry | ConvertTo-Json -Depth 10)
                     })
                 }
             }
@@ -100,6 +115,9 @@ if (-not $DryRun) {
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
 
     try {
+        # Worktree guard: prune any dangling worktrees left by a prior killed run
+        git -C $repo worktree prune 2>&1 | Out-Null
+
         git -C $repo worktree add -q $tmpDir "squad/state" 2>&1 | Out-Null
 
         $researchDir = Join-Path $tmpDir "research"
@@ -114,13 +132,19 @@ if (-not $DryRun) {
             $filepath = Join-Path $researchDir $filename
 
             $archiveEntry = @{
-                archived_at     = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+                archived_at     = [System.DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
                 archived_by     = "Ralph"
                 reason          = $Reason
                 source_branch   = $ClosedBranch
                 source_commit   = $item.Sha
                 source_namespace= $item.Namespace
                 note            = $item.Entry
+            }
+
+            # Dedup guard: skip if this SHA+namespace was already archived on a prior retry
+            if (Test-Path $filepath) {
+                Log "  Skipping duplicate: $filename (already archived)" DarkGray
+                continue
             }
             $archiveEntry | ConvertTo-Json -Depth 10 | Set-Content -Path $filepath -Encoding UTF8
 

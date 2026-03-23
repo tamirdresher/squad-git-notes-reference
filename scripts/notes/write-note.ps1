@@ -48,7 +48,7 @@ try {
 # ── Build full note object ────────────────────────────────────────────────────
 $note = [ordered]@{
     agent     = (Get-Culture).TextInfo.ToTitleCase($Agent)
-    timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+    timestamp = [System.DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
     type      = $Type
 }
 
