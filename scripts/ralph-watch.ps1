@@ -68,8 +68,24 @@ function Get-OpenIssues {
     return ($json | ConvertFrom-Json)
 }
 
+$WatermarkFile = Join-Path $RepoPath ".squad/ralph-pr-watermark.json"
+
+function Get-PRWatermark {
+    if (Test-Path $WatermarkFile) {
+        $w = Get-Content $WatermarkFile -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
+        if ($w.lastChecked) { return $w.lastChecked }
+    }
+    # First run — look back 7 days to catch any PRs closed during a long outage
+    return (Get-Date).AddDays(-7).ToString("yyyy-MM-ddTHH:mm:ssZ")
+}
+
+function Set-PRWatermark {
+    @{ lastChecked = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ") } |
+        ConvertTo-Json | Set-Content $WatermarkFile -Encoding UTF8
+}
+
 function Get-RecentlyMergedPRs {
-    $since = (Get-Date).AddSeconds(-$PollIntervalSeconds * 2).ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $since = Get-PRWatermark
     $json = gh pr list --repo $Repo --state merged --json "number,title,headRefName,mergedAt" `
              --search "merged:>$since" 2>&1
     if ($LASTEXITCODE -ne 0) { return @() }
@@ -77,7 +93,7 @@ function Get-RecentlyMergedPRs {
 }
 
 function Get-RecentlyClosedPRs {
-    $since = (Get-Date).AddSeconds(-$PollIntervalSeconds * 2).ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $since = Get-PRWatermark
     $json = gh pr list --repo $Repo --state closed --json "number,title,headRefName,closedAt" `
              --search "closed:>$since" 2>&1
     if ($LASTEXITCODE -ne 0) { return @() }
@@ -176,7 +192,10 @@ do {
     # ── 5. Write round summary note ────────────────────────────────────────
     Write-RoundSummaryNote -round $round -actions $roundActions
 
-    # ── 6. Push all notes ──────────────────────────────────────────────────
+    # ── 6. Persist PR watermark — survives restarts, covers any outage gap ─
+    if (-not $DryRun) { Set-PRWatermark }
+
+    # ── 7. Push all notes ──────────────────────────────────────────────────
     Sync-Notes -Direction push
 
     Log "Round $round complete. $(if ($Once) { 'Exiting (once mode).' } else { "Sleeping ${PollIntervalSeconds}s..." })"

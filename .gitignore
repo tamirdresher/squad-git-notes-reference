@@ -1,0 +1,2 @@
+# Ralph runtime files — machine-local, should not be committed
+.squad/ralph-pr-watermark.json

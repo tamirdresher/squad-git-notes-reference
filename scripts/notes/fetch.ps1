@@ -48,14 +48,26 @@ if ($LASTEXITCODE -ne 0) {
 
 # ── Merge notes if requested (after push conflict) ──────────────────────────
 if ($Merge) {
+    # Check for and abort any stale merge-in-progress state before starting
+    $mergeLock = Join-Path $repo ".git/NOTES_MERGE_PARTIAL"
+    if (Test-Path $mergeLock) {
+        Log "Stale notes merge in progress — aborting before retry" DarkYellow
+        git -C $repo notes merge --abort 2>&1 | Out-Null
+    }
+
     $namespaces = git -C $repo for-each-ref "refs/notes/squad/" --format="%(refname)" 2>&1
     foreach ($ref in $namespaces) {
         $ns = $ref -replace "refs/notes/", ""
         $remoteRef = "refs/notes/remotes/$Remote/$ns"
         $remoteExists = git -C $repo for-each-ref $remoteRef --format="%(refname)" 2>&1
         if ($remoteExists) {
-            Log "Merging notes: $ns"
-            git -C $repo notes merge $remoteRef 2>&1 | Out-Null
+            Log "Merging notes: $ns (cat_sort_uniq)"
+            # Always specify strategy — default 'manual' leaves repo in broken state on conflict
+            git -C $repo notes --ref=$ns merge -s cat_sort_uniq $remoteRef 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                Log "  Merge failed on $ns — aborting and continuing" Red
+                git -C $repo notes merge --abort 2>&1 | Out-Null
+            }
         }
     }
     Log "Notes merge complete." Green

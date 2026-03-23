@@ -129,9 +129,14 @@ if (-not $DryRun) {
         }
 
         git -C $tmpDir commit -q -m "chore(state): archive $($archivable.Count) note(s) from $ClosedBranch ($Reason)"
-        git -C $tmpDir push $Remote "squad/state" 2>&1 | Out-Null
 
-        Log "State branch updated with $($archivable.Count) archived note(s)." Green
+        $pushOut = git -C $tmpDir push $Remote "squad/state" 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Log "State branch push failed: $pushOut" Red
+            Write-Warning "[archive] Push failed — entries committed locally. Will fast-forward push next round."
+        } else {
+            Log "State branch updated with $($archivable.Count) archived note(s)." Green
+        }
 
     } finally {
         git -C $repo worktree remove $tmpDir --force 2>&1 | Out-Null
