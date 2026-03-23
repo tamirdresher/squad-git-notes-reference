@@ -1,0 +1,33 @@
+# upstream.json — State Repo Pointer
+# Ralph reads this on startup to know where permanent squad memory lives.
+{
+  "stateRepo": "self",
+  "stateBranch": "squad/state",
+  "syncOnStartup": true,
+  "notesNamespaces": [
+    "squad/data",
+    "squad/worf",
+    "squad/seven",
+    "squad/ralph",
+    "squad/q",
+    "squad/research",
+    "squad/review"
+  ],
+  "promotionRules": {
+    "onMerge": {
+      "condition": "promote_to_permanent == true",
+      "target": "state/decisions.md",
+      "format": "append"
+    },
+    "onClose": {
+      "condition": "archive_on_close == true",
+      "target": "state/research/",
+      "format": "json-file"
+    }
+  },
+  "conflictResolution": {
+    "strategy": "fetch-append-push",
+    "maxRetries": 3,
+    "retryDelaySeconds": 5
+  }
+}
